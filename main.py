@@ -1,5 +1,7 @@
 import math
 import numpy as np
+from sympy.abc import x
+from sympy import Eq, solve
 
 # {{ sieve tray }}
 
@@ -23,7 +25,7 @@ R = 8.314
 # {{ mole average in liquid & vapor }}
 MolAvg_liquid = 100 / ((Mfl / MolWt_1) + ((100 - Mfl) / MolWt_2))
 MolAvg_gas = Mfv / 100 * MolWt_1 + (100 - Mfv) / 100 * MolWt_2
-Volumetric_flow_rate_L = FlowRateLiquid * MolAvg_liquid / liquid_density
+Volumetric_flow_rate_L =round(FlowRateLiquid * MolAvg_liquid / liquid_density,3)
 Gas_density = Pressure * MolAvg_gas / (R * (Temperature + 273)) * 100  # kg/m^3
 Volumetric_flow_rate_G = FlowRateVapor * MolAvg_gas / Gas_density  # m^3/s
 
@@ -37,6 +39,10 @@ TowerDiameter = 1  # float(input("please enter TowerDiameter [m] (1 [m] is good 
 #   انتخاب فاصله سینی اولیه
 tray_spacing = 0.5  # input("enter tray spacing [m] (0.5 [m] is good for first Choice) ")
 
+# انتخاب قطر سوراخ های سینی
+# Give from user:
+Do = 4.5  # input("enter Hole Diameter [mm] (4.5 [mm] is good for first Choice or 9[mm] for stainless steel) ")
+
 # انتخاب جنس برج برای طراحی و شماره دهی  0:استیل و 1:کربن
 material_design = input('\n \nPlease select the material you want to design: Stainless steel or Carbon steel ('
                         'preferably '
@@ -46,16 +52,12 @@ if material_design == 'Stainless steel':
 elif material_design == 'Carbon steel':
     material_design_id = 1
     Do = 9
-
 # show user table
 if material_design == 'Stainless steel':
     # Show this for user
     Do_list = [4.5, 6.0, 9.0, 12.0, 15.0, 18]
 elif material_design == 'Carbon steel':
     Do_list = [9.0, 12.0, 15.0, 18]
-# انتخاب قطر سوراخ های سینی
-# Give from user:
-Do = 4.5  # input("enter Hole Diameter [mm] (4.5 [mm] is good for first Choice or 9[mm] for stainless steel) ")
 
 # جدول قطرسوراخ و نسبت ضخامت به قطر سوراخ(L/Do) برای دو جنس 0:استیل و 1:کربن
 Do_Stainless_Carbon_list = {4.5: [0.43], 6.0: [0.32], 9.0: [0.22, 0.5], 12.0: [0.16, 0.38],
@@ -71,7 +73,7 @@ L = math.ceil(Do * Do_Stainless_Carbon_list[Do][material_design_id])  # [mm]
 
 #  محاسبهAo/Aa برای محاسبه CF
 division_AoToAa = 0.907 * (Do ** 2 / P_prim ** 2)
-print('division_AoToAa = ', division_AoToAa)
+# print('division_AoToAa = ', division_AoToAa)
 
 #  {{ Calculation CF }}
 # ابتدا L'/G'(density_g/density_l)^0.5 که نامش را division_for_CF میگذاریم، را  محاسبه میکنیم
@@ -110,6 +112,47 @@ An = Volumetric_flow_rate_G / Vn  # [m^2]
 Times_W_T = 0.7  # float(input('How many times your Weir length than the diameter ? (it is better to be 0.7 times'))
 #  table   6.1 (4)
 #  نسبت طول بند به قطر برج  و ارتباطش با درصد سطح اشغال شده توسط ناودان اینجا به دادن جواب نسبت بسنده کردم
-WToAreaUsedByOneDownSpout_list = {0.6: 5.257, 0.65: 6.899, 0.7: 8.808, 0.75: 11.255, 0.8: 14.145}
-WToAreaUsedByOneDownSpout = WToAreaUsedByOneDownSpout_list[Times_W_T]
+DivisionAdToAtinWToT_dic = {0.6: 5.257, 0.65: 6.899, 0.7: 8.808, 0.75: 11.255, 0.8: 14.145}
+WToAreaUsedByOneDownSpout = DivisionAdToAtinWToT_dic[Times_W_T]
+# print('WToAreaUsedByOneDownSpout= ', WToAreaUsedByOneDownSpout)
 
+# solve At as x
+# At = An + (DivisionAdToAtinWToT_dic[Times_W_T]/100) * At
+eq_solve_At = Eq(An + (DivisionAdToAtinWToT_dic[Times_W_T] / 100) * x, x)
+At = solve(eq_solve_At)  # [m^2]
+# print('At= ', At)
+
+# value of Tower Diameter(Td) as x
+eq_solve_Td = Eq((math.pi * x ** 2) / 4, At[0])
+Td = solve(eq_solve_Td)
+Td = Td[1]
+# print(Td)
+# برای رند کردن به عدد منطقی مانند 1.25 . 1.30 و.. ضرایبی از پنج
+# اول اعشارشو کندم به ضریبی از 5 تبدیل کردم و بعد دوباره اعشارو به عدد اضافه کردم
+Td = round(Td, 2)
+T_tuple = math.modf(Td)
+T_Dec = T_tuple[0] * 100
+T_Dec = round(T_Dec)
+while T_Dec % 5 != 0:
+    T_Dec += 1
+Td = T_tuple[1] + (T_Dec / 100)
+
+# محاسبه مجدد مساحت با شعاع جدید
+At = round(math.pi * Td ** 2 / 4, 3)
+# محاسبه طول بند W  با قطر جدید
+W = round(Times_W_T * Td, 3)  # [m]
+# محاسبه سطح مقطع ناودان
+Ad = round(WToAreaUsedByOneDownSpout / 100 * At, 3)  # [m^2]
+# print(Ad)
+# مساحت سطح فعال
+Aa = round(At - 2 * Ad - 0.2 * (At - 2 * Ad), 2)
+# print('Ad', Ad)
+
+# {{ برج تحت فشار بنویسم کدشو DP :Distillation tower under pressure}}
+Td_for_DP = 1
+while Td_for_DP < (Volumetric_flow_rate_L / (Times_W_T * 0.032)):
+    Td_for_DP += 0.25
+# ساختن یک تابع برای محاسبه ی A ها
+
+
+# چک کردن مقدار q/T
